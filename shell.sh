@@ -4,6 +4,8 @@ wget https://raw.githubusercontent.com/Manesh-R/Sandbox/test/setup-cert.sh
 chmod +x setup-cert.sh
 ./setup-cert.sh
 
+echo "root:Password@1234" | sudo chpasswd
+
 sudo -u demouser git clone https://github.com/microsoft/nlp.git /home/demouser/notebooks/nlp
 cd /home/demouser/notebooks/nlp
 sudo -u demouser git checkout origin/ignite
