@@ -46,4 +46,4 @@ echo "kubectl apply -f azure-vote.yaml" >> /home/labuser/aks-create.sh
 cd /home/labuser
 chmod 777 /home/labuser/aks-create.sh
 chown labuser.labuser /home/labuser/aks-create.sh
-runuser -l demouser -c 'sh /home/labuser/aks-create.sh'
+runuser -l labuser -c 'sh /home/labuser/aks-create.sh'
