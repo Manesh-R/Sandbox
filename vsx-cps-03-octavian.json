@@ -1,0 +1,198 @@
+﻿{
+  "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "adminUsername": {
+      "type": "string"
+    },
+    "adminPassword": {
+      "type": "securestring"
+    },
+    "DID": {
+      "type": "string"
+    }
+  },
+  "variables": {
+    "virtualNetworkName": "VSX-vNet",
+    "virtualMachineName": "VSX-Host",
+    "virtualMachineSize": "Standard_D32s_v3",
+    "networkInterfaceName": "[concat(variables('virtualMachineName'), '-nic')]",
+    "networkSecurityGroupName": "[concat(variables('virtualMachineName'), '-nsg')]",
+    "publicIpAddressName": "[concat(variables('virtualMachineName'), '-pip')]",
+    "publicIpAddressDNSName": "[concat('vsx-host-', parameters('DID'))]",
+    "subnetName": "subnet1",
+    "location": "[resourceGroup().location]",
+    "subnetRef": "[resourceId('Microsoft.Network/virtualNetworks/subnets/',variables('virtualNetworkName'), variables('subnetName'))]",
+    "accountType": "Premium_LRS",
+    "osdiskname": "VSX-OSDisk",
+    "sourceSnapshotResourceId": "[concat('/subscriptions/', subscription().subscriptionId,'/resourceGroups/aec-mgmt-rg/providers/Microsoft.Compute/snapshots/vsx-cps-octavian-v1-',resourceGroup().location,'-beforesysprep')]"
+  },
+  "resources": [
+    {
+      "apiVersion": "2016-09-01",
+      "name": "pid-e843308b-3ce2-42a2-b743-2f21b36a5e68",
+      "type": "Microsoft.Resources/deployments",
+      "properties": {
+        "mode": "Incremental",
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "resources": []
+        }
+      }
+    },
+    {
+      "apiVersion": "2018-06-01",
+      "type": "Microsoft.Compute/disks",
+      "name": "[variables('osdiskname')]",
+      "location": "[variables('location')]",
+      "properties": {
+        "creationData": {
+          "createOption": "Copy",
+          "sourceResourceId": "[variables('sourceSnapshotResourceId')]"
+        },
+        "diskSizeGB": 2048,
+        "osType": "Windows"
+      },
+      "sku": {
+        "name": "[variables('accountType')]"
+      }
+    },
+    {
+      "type": "Microsoft.Network/virtualNetworks",
+      "name": "[variables('virtualNetworkName')]",
+      "apiVersion": "2015-06-15",
+      "location": "[variables('location')]",
+      "tags": {},
+      "properties": {
+        "addressSpace": {
+          "addressPrefixes": [
+            "10.0.0.0/16"
+          ]
+        },
+        "subnets": [
+          {
+            "name": "[variables('subnetName')]",
+            "properties": {
+              "addressPrefix": "10.0.2.0/24"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "type": "Microsoft.Network/networkSecurityGroups",
+      "name": "[variables('networkSecurityGroupName')]",
+      "apiVersion": "2015-06-15",
+      "location": "[variables('location')]",
+      "tags": {},
+      "properties": {
+        "securityRules": [
+          {
+            "name": "default-allow-rdp",
+            "properties": {
+              "priority": 1000,
+              "protocol": "TCP",
+              "access": "Allow",
+              "direction": "Inbound",
+              "sourceAddressPrefix": "*",
+              "sourcePortRange": "*",
+              "destinationAddressPrefix": "*",
+              "destinationPortRange": "*"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "type": "Microsoft.Network/publicIPAddresses",
+      "name": "[variables('publicIpAddressName')]",
+      "apiVersion": "2018-01-01",
+      "location": "[variables('location')]",
+      "tags": {},
+      "properties": {
+        "publicIPAllocationMethod": "Dynamic",
+        "dnsSettings": {
+          "domainNameLabel": "[concat(variables('publicIpAddressDNSName'))]"
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Network/networkInterfaces",
+      "name": "[variables('networkInterfaceName')]",
+      "apiVersion": "2015-06-15",
+      "location": "[variables('location')]",
+      "tags": {},
+      "properties": {
+        "ipConfigurations": [
+          {
+            "name": "CCSM-VM-PIP",
+            "properties": {
+              "privateIPAllocationMethod": "Dynamic",
+              "subnet": {
+                "id": "[variables('subnetRef')]"
+              },
+              "publicIPAddress": {
+                "id": "[resourceId(resourceGroup().name,'Microsoft.Network/publicIpAddresses', variables('publicIpAddressName'))]"
+              }
+            }
+          }
+        ],
+        "networkSecurityGroup": {
+          "id": "[resourceId(resourceGroup().name, 'Microsoft.Network/networkSecurityGroups', variables('networkSecurityGroupName'))]"
+        }
+      },
+      "dependsOn": [
+        "[concat('Microsoft.Network/virtualNetworks/', variables('virtualNetworkName'))]",
+        "[concat('Microsoft.Network/publicIpAddresses/', variables('publicIpAddressName'))]",
+        "[concat('Microsoft.Network/networkSecurityGroups/', variables('networkSecurityGroupName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Compute/virtualMachines",
+      "name": "[variables('virtualMachineName')]",
+      "apiVersion": "2018-06-01",
+      "location": "[variables('location')]",
+      "tags": {},
+      "properties": {
+        "hardwareProfile": {
+          "vmSize": "[variables('virtualMachineSize')]"
+        },
+        "networkProfile": {
+          "networkInterfaces": [
+            {
+              "id": "[resourceId('Microsoft.Network/networkInterfaces', variables('networkInterfaceName'))]"
+            }
+          ]
+        },
+        "storageProfile": {
+          "osDisk": {
+            "createOption": "Attach",
+            "osType": "Windows",
+            "managedDisk": {
+              "id": "[concat('/subscriptions/', subscription().subscriptionId,'/resourceGroups/',resourceGroup().Name,'/providers/Microsoft.Compute/disks/vsx-OSDisk')]"
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Compute/disks/', variables('osdiskname'))]",
+        "[concat('Microsoft.Network/networkInterfaces/', variables('networkInterfaceName'))]"
+      ]
+    }
+  ],
+  "outputs": {
+    "VSX Host DNS Name": {
+      "value": "[reference(resourceId('Microsoft.Network/publicIPAddresses',variables('publicIpAddressName'))).dnsSettings.fqdn]",
+      "type": "string"
+    },
+    "VSX Host admin Username": {
+      "type": "string",
+      "value": "admin"
+    },
+    "VSX Host admin Password": {
+      "type": "string",
+      "value": "Chkp!234"
+    }
+  }
+}
